@@ -1,0 +1,115 @@
+- hosts: 127.0.0.1
+  connection: local
+  become: yes
+  vars_prompt:
+    - name: zabbix_version
+      prompt: "Which version of Zabbix server would you like to install (5.0, 5.4, 6.0)?"
+      private: no
+  vars:
+    php: "{% if ansible_distribution_release == 'bullseye' %}7.4{% elif ansible_distribution_release == 'buster' %}7.3{% elif ansible_distribution_release == 'focal' %}7.4{% elif ansible_distribution_release == 'bionic' %}7.2{% else %}break{% endif %}"
+  tasks:
+  - name: 'Check Linux Distribution'
+    fail: msg="Unsupported Distribution"
+    when: "php == 'break'"
+  - name: We need to define some facts :)
+    set_fact:
+      db_random_password: "{{ lookup('password', '/dev/null length=16 chars=ascii_letters,digit,hexdigits')}}"
+      zabbix_server_repo: "http://repo.zabbix.com/zabbix/{{ zabbix_version }}/{{ ansible_distribution.lower() }} {{ ansible_distribution_release }} main"
+  - name: Install additional software
+    apt:
+      name: ca-certificates,nano,mc,vim,wget,curl,gnupg
+      state: latest
+  - name: Add gpg key
+    apt_key:
+      url: http://repo.zabbix.com/zabbix-official-repo.key
+  - name: Add zabbix repository
+    apt_repository:
+      repo: "deb {{ zabbix_server_repo }}"
+      state: present
+  - name: Update cache
+    apt:
+      update_cache: yes
+  - name: Install MariaDB, Zabbix and Zabbix frontend
+    apt:
+      name: mariadb-server,python3-pymysql,zabbix-agent,zabbix-frontend-php,zabbix-server-mysql,zabbix-apache-conf,zabbix-get,zabbix-sql-scripts
+      state: present
+    when: zabbix_version | float >= 5.4
+  - name: Install MariaDB, Zabbix and Zabbix frontend
+    apt:
+      name: mariadb-server,python3-pymysql,zabbix-agent,zabbix-frontend-php,zabbix-server-mysql,zabbix-apache-conf,zabbix-get
+      state: present
+    when: zabbix_version | float < 5.4
+  - name: Restart and enable mariadb
+    service:
+      name: "{{ item }}"
+      state: restarted
+      enabled: yes
+    with_items:
+      - 'mariadb'
+      - 'mysql'
+      - 'mariadbd'
+    ignore_errors: yes
+  - name: Create database
+    mysql_db:
+        name: zabbix
+        encoding: utf8
+        collation: utf8_bin
+        state: present
+        login_user: root
+        login_password: ''
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+  - name: Create user and grant privileges
+    mysql_user:
+      name: zabbix
+      password: "{{ db_random_password }}"
+      priv: 'zabbix.*:ALL'
+      state: present
+      login_unix_socket: /var/run/mysqld/mysqld.sock
+  - name: Import zabbix database for zabbix 5.0
+    mysql_db:
+      name: zabbix
+      state: import
+      target: /usr/share/doc/zabbix-server-mysql/create.sql.gz
+      login_user: zabbix
+      login_password: "{{ db_random_password }}"
+      login_unix_socket: /var/run/mysqld/mysqld.sock
+    when: zabbix_version | float < 5.4
+  - name: Import zabbix database for zabbix 5.4 and newer
+    mysql_db:
+      name: zabbix
+      state: import
+      target: /usr/share/doc/zabbix-sql-scripts/mysql/server.sql.gz
+      login_user: zabbix
+      login_password: "{{ db_random_password }}"
+      login_unix_socket: /var/run/mysqld/mysqld.sock
+    when: zabbix_version | float >= 5.4
+  - name: Set timezone in apache2 php.ini
+    lineinfile: dest=/etc/php/{{ php }}/apache2/php.ini
+                regexp='date.timezone ='
+                line='date.timezone = Europe/Bratislava'
+  - name: Set DBPassword in zabbix_server.conf
+    lineinfile: dest=/etc/zabbix/zabbix_server.conf
+                regexp='DBPassword'
+                line='DBPassword = {{ db_random_password }}'
+  - name: Restart and enable services
+    service:
+      name: "{{ item }}"
+      state: restarted
+      enabled: yes
+    with_items:
+      - 'zabbix-agent'
+      - 'zabbix-server'
+      - 'apache2'
+  - name: Import Zabbix frontend configuration
+    template:
+          src: zabbix.conf.php.conf
+          dest: /etc/zabbix/web/zabbix.conf.php
+          owner: www-data
+          group: www-data
+          mode: '0644'
+  - name: Finish
+    debug:
+      msg:
+        - "The installation of Zabbix server is done, please go to Zabbix frontend: http://{{ ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}/zabbix ."
+        - "Default username is Admin and password is zabbix."
+        - "CAUTION: Do not use default credentials in production."
