@@ -1,0 +1,42 @@
+- hosts: 127.0.0.1
+  connection: local
+  become: yes
+  tasks:
+  - name: Install curl, wget and grep
+    ansible.builtin.apt:
+      pkg:
+        - curl
+        - wget
+        - grep
+      update_cache: yes
+  - name: Download latest release of code-server
+    ansible.builtin.raw: 'curl -s  https://api.github.com/repos/coder/code-server/releases/latest |   grep -E "browser_download_url.*amd64.deb" |   cut -d : -f 2,3 |   tr -d \" | tr -d " \t\n\r" '
+    register: code_server
+  - name: Install code-server
+    ansible.builtin.apt:
+      deb: "{{code_server.stdout}}"
+  - name: Enable code-server systemd job
+    ansible.builtin.systemd:
+      enabled: yes
+      daemon_reload: yes
+      state: started
+      name: "code-server@{{ ansible_env.USER }}"
+  - name: Remove code-server config file
+    ansible.builtin.file:
+      path: ~/.config/code-server/config.yaml
+      state: absent
+  - name: Create new config file for code-server
+    ansible.builtin.blockinfile:
+      path: ~/.config/code-server/config.yaml
+      block: |-
+        bind-addr: 0.0.0.0:8080
+        auth: password
+        password: opensource
+        cert: false
+      state: present
+      create: true
+  - name: Reload daemon and restart code-server service 
+    ansible.builtin.systemd:
+      state: restarted
+      daemon_reload: true
+      name: "code-server@{{ ansible_env.USER }}"
