@@ -23,11 +23,11 @@
       name: "code-server@{{ ansible_env.USER }}"
   - name: Remove code-server config file
     ansible.builtin.file:
-      path: ~/.config/code-server/config.yaml
+      path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
       state: absent
   - name: Create new config file for code-server
     ansible.builtin.blockinfile:
-      path: ~/.config/code-server/config.yaml
+      path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
       block: |-
         bind-addr: 0.0.0.0:8080
         auth: password
