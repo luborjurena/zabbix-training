@@ -21,10 +21,11 @@
       daemon_reload: yes
       state: started
       name: "code-server@{{ ansible_env.USER }}"
-  - name: Remove code-server config file
-    ansible.builtin.file:
+  - name: Remove any existing content from the file
+    ansible.builtin.replace:
       path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
-      state: absent
+      regexp: '.*'
+      replace: ''  # This will replace any existing content with an empty string    
   - name: Create new config file for code-server
     ansible.builtin.blockinfile:
       path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
