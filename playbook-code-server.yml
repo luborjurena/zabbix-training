@@ -26,7 +26,6 @@
       path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
       regexp: '.*'
       replace: ''  # This will replace any existing content with an empty string    
-      ignore_errors: yes
   - name: Create new config file for code-server
     ansible.builtin.blockinfile:
       path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
