@@ -21,6 +21,11 @@
       daemon_reload: yes
       state: started
       name: "code-server@{{ ansible_env.USER }}"
+  - name: Ensure the code-server config directory exists
+    file:
+      path: "{{ ansible_env.HOME }}/.config/code-server/"
+      state: directory
+      mode: '0755'
   - name: Remove any existing content from the file
     ansible.builtin.replace:
       path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
