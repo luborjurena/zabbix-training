@@ -1,48 +1,76 @@
+---
 - hosts: 127.0.0.1
   connection: local
   become: yes
+  vars:
+    code_server_config_dir: "{{ ansible_env.HOME }}/.config/code-server"
+    code_server_config_file: "{{ code_server_config_dir }}/config.yaml"
+    code_server_bind_addr: "0.0.0.0:8080"
+    code_server_auth: "password"
+    code_server_password: "opensource"
+    code_server_deb_dest: "/tmp/code-server.deb"
   tasks:
-  - name: Install curl, wget and grep
-    ansible.builtin.apt:
-      pkg:
-        - curl
-        - wget
-        - grep
-      update_cache: yes
-  - name: Download latest release of code-server
-    ansible.builtin.raw: 'curl -s  https://api.github.com/repos/coder/code-server/releases/latest |   grep -E "browser_download_url.*amd64.deb" |   cut -d : -f 2,3 |   tr -d \" | tr -d " \t\n\r" '
-    register: code_server
-  - name: Install code-server
-    ansible.builtin.apt:
-      deb: "{{code_server.stdout}}"
-  - name: Enable code-server systemd job
-    ansible.builtin.systemd:
-      enabled: yes
-      daemon_reload: yes
-      state: started
-      name: "code-server@{{ ansible_env.USER }}"
-  - name: Ensure the code-server config directory exists
-    file:
-      path: "{{ ansible_env.HOME }}/.config/code-server/"
-      state: directory
-      mode: '0755'
-  - name: Remove any existing content from the file
-    ansible.builtin.replace:
-      path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
-      regexp: '.*'
-      replace: ''  # This will replace any existing content with an empty string    
-  - name: Create new config file for code-server
-    ansible.builtin.blockinfile:
-      path: "{{ ansible_env.HOME }}/.config/code-server/config.yaml"
-      block: |-
-        bind-addr: 0.0.0.0:8080
-        auth: password
-        password: opensource
-        cert: false
-      state: present
-      create: true
-  - name: Reload daemon and restart code-server service 
-    ansible.builtin.systemd:
-      state: restarted
-      daemon_reload: true
-      name: "code-server@{{ ansible_env.USER }}"
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - grep
+        update_cache: yes
+
+    - name: Get latest code-server release info from GitHub
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/coder/code-server/releases/latest"
+        return_content: yes
+        status_code: 200
+      register: release_info
+
+    - name: Set code-server download URL from assets
+      ansible.builtin.set_fact:
+        code_server_url: >-
+          {{ (release_info.json.assets | selectattr("name", "search", "amd64.deb") | list | first).browser_download_url }}
+      when: release_info.json.assets is defined
+
+    - name: Debug code-server download URL
+      ansible.builtin.debug:
+        msg: "Downloading code-server from {{ code_server_url }}"
+
+    - name: Download code-server .deb package
+      ansible.builtin.get_url:
+        url: "{{ code_server_url }}"
+        dest: "{{ code_server_deb_dest }}"
+        mode: '0644'
+      when: code_server_url is defined
+
+    - name: Install code-server package
+      ansible.builtin.apt:
+        deb: "{{ code_server_deb_dest }}"
+
+    - name: Enable and start code-server systemd service
+      ansible.builtin.systemd:
+        name: "code-server@{{ ansible_env.USER }}"
+        enabled: yes
+        state: started
+        daemon_reload: yes
+
+    - name: Ensure code-server config directory exists
+      ansible.builtin.file:
+        path: "{{ code_server_config_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Deploy code-server configuration file
+      ansible.builtin.copy:
+        dest: "{{ code_server_config_file }}"
+        content: |
+          bind-addr: {{ code_server_bind_addr }}
+          auth: {{ code_server_auth }}
+          password: {{ code_server_password }}
+          cert: false
+        mode: '0644'
+
+    - name: Reload daemon and restart code-server service
+      ansible.builtin.systemd:
+        name: "code-server@{{ ansible_env.USER }}"
+        state: restarted
+        daemon_reload: yes
