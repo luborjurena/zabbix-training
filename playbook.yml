@@ -110,6 +110,6 @@
   - name: Done ... Your installation is ready!
     debug:
       msg:
-        - "The installation of Zabbix server is ready, please go to Zabbix frontend: http://{{ ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}/zabbix ."
-        - "Default username is Admin and default password is zabbix."
-        - "CAUTION: Do not use default credentials in production."
+        - "The installation of the Zabbix server is complete. Please go to the Zabbix frontend: http://{{ ansible_default_ipv4.address|default(ansible_all_ipv4_addresses[0]) }}/zabbix ."
+        - "The default username is Admin and the default password is zabbix."
+        - "CAUTION: Do not use the default credentials in production."
