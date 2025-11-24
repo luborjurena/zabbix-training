@@ -3,7 +3,7 @@
   become: yes
   vars_prompt:
     - name: zabbix_version
-      prompt: "What release of Zabbix do you wish to install? (5.0, 5.4, 6.0)?"
+      prompt: "What version of Zabbix do you wish to install? (6.0, 7.0)"
       private: no
   vars:
     php: "{% if ansible_distribution_release == 'bullseye' %}7.4{% elif ansible_distribution_release == 'bookworm' %}8.2{% elif ansible_distribution_release == 'buster' %}7.3{% elif ansible_distribution_release == 'focal' %}7.4{% elif ansible_distribution_release == 'bionic' %}7.2{% else %}break{% endif %}"
